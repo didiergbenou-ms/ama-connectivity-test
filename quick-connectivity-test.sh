@@ -5,6 +5,13 @@
 
 set -euo pipefail
 
+# Parse command line arguments
+VERBOSE=false
+if [[ "${1:-}" == "--verbose" ]]; then
+    VERBOSE=true
+    shift
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -30,16 +37,49 @@ quick_test() {
     local endpoint=$1
     local name=$2
     
-    printf "%-50s" "$name: "
-    
-    # Test DNS and basic connectivity
-    if curl -s --max-time 10 -k "https://$endpoint" >/dev/null 2>&1 || \
-       curl -s --max-time 10 -k "https://$endpoint/ping" >/dev/null 2>&1; then
-        echo -e "${GREEN}PASS${NC}"
-        return 0
+    if [ "$VERBOSE" = "true" ]; then
+        print_status "INFO" "Testing $name ($endpoint)"
+        
+        # DNS Test
+        print_status "INFO" "DNS Resolution: nslookup $endpoint"
+        if nslookup "$endpoint" 2>&1; then
+            print_status "SUCCESS" "DNS resolution successful for $endpoint"
+        else
+            print_status "ERROR" "DNS resolution failed for $endpoint"
+            return 1
+        fi
+        
+        # SSL Test
+        print_status "INFO" "SSL Test: openssl s_client -connect $endpoint:443 -brief"
+        if timeout 10 openssl s_client -connect "$endpoint:443" -brief 2>&1; then
+            print_status "SUCCESS" "SSL connection successful for $endpoint"
+        else
+            print_status "ERROR" "SSL connection failed for $endpoint"
+        fi
+        
+        # HTTP Test
+        print_status "INFO" "HTTP Test: curl -v --max-time 10 -k https://$endpoint"
+        if curl -v --max-time 10 -k "https://$endpoint" 2>&1; then
+            print_status "SUCCESS" "HTTP connection successful for $endpoint"
+            echo ""
+            return 0
+        else
+            print_status "ERROR" "HTTP connection failed for $endpoint"
+            echo ""
+            return 1
+        fi
     else
-        echo -e "${RED}FAIL${NC}"
-        return 1
+        printf "%-50s" "$name: "
+        
+        # Test DNS and basic connectivity
+        if curl -s --max-time 10 -k "https://$endpoint" >/dev/null 2>&1 || \
+           curl -s --max-time 10 -k "https://$endpoint/ping" >/dev/null 2>&1; then
+            echo -e "${GREEN}PASS${NC}"
+            return 0
+        else
+            echo -e "${RED}FAIL${NC}"
+            return 1
+        fi
     fi
 }
 
@@ -65,7 +105,11 @@ get_regions() {
 
 main() {
     echo "Azure Monitor Agent - Quick Connectivity Test"
-    echo "=============================================="
+    echo "==============================================" 
+    if [ "$VERBOSE" = "true" ]; then
+        print_status "INFO" "Verbose mode enabled - showing detailed command output"
+    fi
+    echo ""
     
     # Check prerequisites
     if ! command -v jq >/dev/null 2>&1; then

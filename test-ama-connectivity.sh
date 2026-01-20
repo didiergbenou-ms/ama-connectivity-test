@@ -7,6 +7,13 @@
 
 set -euo pipefail
 
+# Parse command line arguments
+VERBOSE=false
+if [[ "${1:-}" == "--verbose" ]]; then
+    VERBOSE=true
+    shift
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -263,21 +270,37 @@ build_curl_command() {
 # Function to test DNS resolution
 test_dns_resolution() {
     local endpoint=$1
-    print_status "INFO" "Testing DNS resolution for $endpoint"
     
-    if nslookup "$endpoint" >/dev/null 2>&1; then
-        print_status "SUCCESS" "DNS resolution successful for $endpoint"
-        return 0
+    if [ "$VERBOSE" = "true" ]; then
+        print_status "INFO" "Testing DNS resolution: nslookup $endpoint"
+        if nslookup "$endpoint" 2>&1; then
+            print_status "SUCCESS" "DNS resolution successful for $endpoint"
+            return 0
+        else
+            print_status "ERROR" "DNS resolution failed for $endpoint"
+            return 1
+        fi
     else
-        print_status "ERROR" "DNS resolution failed for $endpoint"
-        return 1
+        print_status "INFO" "Testing DNS resolution for $endpoint"
+        if nslookup "$endpoint" >/dev/null 2>&1; then
+            print_status "SUCCESS" "DNS resolution successful for $endpoint"
+            return 0
+        else
+            print_status "ERROR" "DNS resolution failed for $endpoint"
+            return 1
+        fi
     fi
 }
 
 # Function to test SSL connection
 test_ssl_connection() {
     local endpoint=$1
-    print_status "INFO" "Testing SSL connection to $endpoint:443"
+    
+    if [ "$VERBOSE" = "true" ]; then
+        print_status "INFO" "Testing SSL connection: openssl s_client -connect $endpoint:443 -brief"
+    else
+        print_status "INFO" "Testing SSL connection to $endpoint:443"
+    fi
     
     local ssl_cmd="echo | openssl s_client -connect $endpoint:443 -brief"
     
@@ -288,23 +311,45 @@ test_ssl_connection() {
     fi
     
     local ssl_output
-    if ssl_output=$($ssl_cmd 2>&1); then
-        if echo "$ssl_output" | grep -q "CONNECTION ESTABLISHED"; then
-            if echo "$ssl_output" | grep -q "Verification: OK"; then
-                print_status "SUCCESS" "SSL connection and verification successful for $endpoint"
-                return 0
+    if [ "$VERBOSE" = "true" ]; then
+        if ssl_output=$($ssl_cmd 2>&1); then
+            echo "SSL Output:"
+            echo "$ssl_output"
+            if echo "$ssl_output" | grep -q "CONNECTION ESTABLISHED"; then
+                if echo "$ssl_output" | grep -q "Verification: OK"; then
+                    print_status "SUCCESS" "SSL connection and verification successful for $endpoint"
+                    return 0
+                else
+                    print_status "WARNING" "SSL connection established but verification failed for $endpoint"
+                    return 0
+                fi
             else
-                print_status "WARNING" "SSL connection established but verification failed for $endpoint"
-                return 0
+                print_status "ERROR" "SSL connection failed for $endpoint"
+                return 1
             fi
         else
-            print_status "ERROR" "SSL connection failed for $endpoint"
-            print_status "ERROR" "SSL output: $ssl_output"
+            print_status "ERROR" "SSL connection test failed for $endpoint: $ssl_output"
             return 1
         fi
     else
-        print_status "ERROR" "SSL connection test failed for $endpoint: $ssl_output"
-        return 1
+        if ssl_output=$($ssl_cmd 2>&1); then
+            if echo "$ssl_output" | grep -q "CONNECTION ESTABLISHED"; then
+                if echo "$ssl_output" | grep -q "Verification: OK"; then
+                    print_status "SUCCESS" "SSL connection and verification successful for $endpoint"
+                    return 0
+                else
+                    print_status "WARNING" "SSL connection established but verification failed for $endpoint"
+                    return 0
+                fi
+            else
+                print_status "ERROR" "SSL connection failed for $endpoint"
+                print_status "ERROR" "SSL output: $ssl_output"
+                return 1
+            fi
+        else
+            print_status "ERROR" "SSL connection test failed for $endpoint: $ssl_output"
+            return 1
+        fi
     fi
 }
 

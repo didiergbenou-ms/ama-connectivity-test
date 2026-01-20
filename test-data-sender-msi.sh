@@ -2,9 +2,18 @@
 
 # Azure Monitor Agent - Enhanced Data Sender with MSI Token Authentication
 # This script replicates the actual AMA authentication flow using IMDS/MSI tokens
-# Usage: ./test-data-sender-msi.sh [-t LOG_TYPE] [-d DATA] [-r RESOURCE]
+# Usage: ./test-data-sender-msi.sh [-t LOG_TYPE] [-d DATA] [-r RESOURCE] [--verbose]
 
 set -euo pipefail
+
+# Parse verbose flag first
+VERBOSE=false
+for arg in "$@"; do
+    if [[ "$arg" == "--verbose" ]]; then
+        VERBOSE=true
+        break
+    fi
+done
 
 # Colors
 RED='\033[0;31m'
@@ -36,13 +45,14 @@ print_status() {
 }
 
 usage() {
-    echo "Usage: $0 [-t LOG_TYPE] [-d DATA] [-r RESOURCE] [-w WORKSPACE_ID]"
+    echo "Usage: $0 [-t LOG_TYPE] [-d DATA] [-r RESOURCE] [-w WORKSPACE_ID] [--verbose]"
     echo ""
     echo "Options:"
     echo "  -t LOG_TYPE      Custom log type name (default: AMAConnectivityTest_CL)"
     echo "  -d DATA          Custom JSON data (default: test message)"
     echo "  -r RESOURCE      OAuth resource URL (default: https://api.loganalytics.io)"
     echo "  -w WORKSPACE_ID  Specific workspace ID (auto-detected from DCR if not provided)"
+    echo "  --verbose        Show detailed HTTP requests and responses"
     echo "  -h               Show this help message"
     echo ""
     echo "This script uses Managed Identity/MSI authentication just like the real AMA agent."
@@ -105,8 +115,16 @@ get_access_token() {
         
         # First, get the challenge token
         local challenge_response
-        challenge_response=$(curl -s -D - -H "$metadata_header" \
-            "$token_url&resource=$(printf '%s' "$resource" | jq -sRr @uri)" 2>/dev/null)
+        if [ "$VERBOSE" = "true" ]; then
+            print_status "INFO" "Sending Arc challenge request: curl -s -D - -H \"$metadata_header\" \"$token_url&resource=...\""
+            challenge_response=$(curl -s -D - -H "$metadata_header" \
+                "$token_url&resource=$(printf '%s' "$resource" | jq -sRr @uri)" 2>&1)
+            echo "Challenge Response:"
+            echo "$challenge_response"
+        else
+            challenge_response=$(curl -s -D - -H "$metadata_header" \
+                "$token_url&resource=$(printf '%s' "$resource" | jq -sRr @uri)" 2>/dev/null)
+        fi
         
         local challenge_path=$(echo "$challenge_response" | grep -i "www-authenticate" | cut -d "=" -f 2 | tr -d '\r\n')
         
@@ -119,9 +137,18 @@ get_access_token() {
         
         # Now get the actual token with the challenge
         local token_response
-        token_response=$(curl -s -H "$metadata_header" \
-            -H "Authorization: Basic $challenge_token" \
-            "$token_url&resource=$(printf '%s' "$resource" | jq -sRr @uri)" 2>/dev/null)
+        if [ "$VERBOSE" = "true" ]; then
+            print_status "INFO" "Getting Arc token: curl -s -H \"$metadata_header\" -H \"Authorization: Basic $challenge_token\" \"$token_url&resource=...\""
+            token_response=$(curl -s -H "$metadata_header" \
+                -H "Authorization: Basic $challenge_token" \
+                "$token_url&resource=$(printf '%s' "$resource" | jq -sRr @uri)" 2>&1)
+            echo "Token Response:"
+            echo "$token_response"
+        else
+            token_response=$(curl -s -H "$metadata_header" \
+                -H "Authorization: Basic $challenge_token" \
+                "$token_url&resource=$(printf '%s' "$resource" | jq -sRr @uri)" 2>/dev/null)
+        fi
         
     else
         print_status "INFO" "Detected Azure VM environment"
@@ -155,16 +182,39 @@ get_access_token() {
         
         # Get token from IMDS
         local token_response
-        token_response=$(curl -s -H "$metadata_header" --noproxy "*" "$full_url" 2>/dev/null)
+        if [ "$VERBOSE" = "true" ]; then
+            print_status "INFO" "Getting Azure VM token: curl -s -H \"$metadata_header\" --noproxy \"*\" \"$full_url\""
+            token_response=$(curl -s -H "$metadata_header" --noproxy "*" "$full_url" 2>&1)
+            echo "Token Response:"
+            echo "$token_response"
+        else
+            token_response=$(curl -s -H "$metadata_header" --noproxy "*" "$full_url" 2>/dev/null)
+        fi
     fi
     
     # Parse token response
     local access_token
     access_token=$(echo "$token_response" | jq -r '.access_token // empty' 2>/dev/null)
     
+    if [ "$VERBOSE" = "true" ]; then
+        if [ -n "$access_token" ] && [ "$access_token" != "null" ]; then
+            local token_preview="${access_token:0:20}..."
+            print_status "SUCCESS" "Access token acquired: $token_preview"
+            
+            # Show token expiry if available
+            local expires_on=$(echo "$token_response" | jq -r '.expires_on // empty' 2>/dev/null)
+            if [ -n "$expires_on" ] && [ "$expires_on" != "null" ]; then
+                local expires_date=$(date -d "@$expires_on" 2>/dev/null || echo "Invalid date")
+                print_status "INFO" "Token expires: $expires_date"
+            fi
+        fi
+    fi
+    
     if [ -z "$access_token" ] || [ "$access_token" = "null" ]; then
         print_status "ERROR" "Failed to acquire access token"
-        print_status "ERROR" "IMDS response: $token_response"
+        if [ "$VERBOSE" = "true" ]; then
+            print_status "ERROR" "IMDS response: $token_response"
+        fi
         return 1
     fi
     
@@ -278,18 +328,42 @@ send_data_with_msi_token() {
     local response
     local http_code
     
-    if response=$(curl -s -w "%{http_code}" \
-        -X POST \
-        -H "Content-Type: application/json" \
-        -H "Authorization: Bearer $access_token" \
-        -H "Log-Type: $log_type" \
-        -H "x-ms-date: $date_string" \
-        -H "time-generated-field: TimeGenerated" \
-        -d "$test_data" \
-        "$url" 2>&1); then
+    if [ "$VERBOSE" = "true" ]; then
+        print_status "INFO" "Sending HTTP POST: curl -X POST -H \"Content-Type: application/json\" -H \"Authorization: Bearer [TOKEN]\" -H \"Log-Type: $log_type\" \"$url\""
+        print_status "INFO" "Request data: $test_data"
+        
+        response=$(curl -v -w "%{http_code}" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $access_token" \
+            -H "Log-Type: $log_type" \
+            -H "x-ms-date: $date_string" \
+            -H "time-generated-field: TimeGenerated" \
+            -d "$test_data" \
+            "$url" 2>&1)
+    else
+        response=$(curl -s -w "%{http_code}" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $access_token" \
+            -H "Log-Type: $log_type" \
+            -H "x-ms-date: $date_string" \
+            -H "time-generated-field: TimeGenerated" \
+            -d "$test_data" \
+            "$url" 2>&1)
+    fi
+    
+    if [ $? -eq 0 ]; then
         
         http_code=$(echo "$response" | tail -c 4)
         response_body=$(echo "$response" | head -c -4)
+        
+        if [ "$VERBOSE" = "true" ]; then
+            echo ""
+            echo "HTTP Response Code: $http_code"
+            echo "Response Body: $response_body"
+            echo ""
+        fi
         
         case "$http_code" in
             "200"|"202")
