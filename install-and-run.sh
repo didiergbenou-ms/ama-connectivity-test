@@ -104,8 +104,8 @@ run_data_sender_test() {
         print_status "INFO" "This test requires your Log Analytics workspace credentials"
         print_status "INFO" "You can find these in: Azure Portal > Log Analytics workspace > Settings > Agents management"
         echo ""
-        read -p "Enter Workspace ID: " workspace_id
-        read -s -p "Enter Workspace Key: " workspace_key
+        read -p "Enter Workspace ID: " workspace_id < /dev/tty
+        read -s -p "Enter Workspace Key: " workspace_key < /dev/tty
         echo ""
         
         if [ -n "$workspace_id" ] && [ -n "$workspace_key" ]; then
@@ -201,7 +201,7 @@ main() {
     # Interactive mode
     while true; do
         show_menu
-        read -p "Select an option (1-5): " choice
+        read -p "Select an option (1-5): " choice < /dev/tty
         
         case $choice in
             1)
@@ -226,7 +226,7 @@ main() {
         esac
         
         echo ""
-        read -p "Press Enter to continue..."
+        read -p "Press Enter to continue..." < /dev/tty
     done
 }
 
