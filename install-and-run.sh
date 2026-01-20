@@ -16,6 +16,7 @@ NC='\033[0m'
 # Configuration - Update these URLs to point to your GitHub repository
 GITHUB_BASE_URL="https://raw.githubusercontent.com/didiergbenou-ms/ama-connectivity-test/main"
 TEMP_DIR="/tmp/ama-connectivity-tests"
+VERBOSE=false
 
 print_status() {
     local status=$1
@@ -82,26 +83,101 @@ show_menu() {
 
 # Function to run quick test
 run_quick_test() {
+    # Ask about verbose mode if not already set via command line and we're in interactive mode
+    if [ "$VERBOSE" = "false" ] && [ "${1:-}" != "--from-cmdline" ]; then
+        echo ""
+        echo -e "${BLUE}[OPTION]${NC} Run Quick Test in verbose mode?"
+        echo "         (Shows detailed command output for debugging SSL/connectivity issues)"
+        read -p "Enable verbose mode for this test? [y/N]: " verbose_choice < /dev/tty
+        
+        case "$verbose_choice" in
+            [Yy]|[Yy][Ee][Ss])
+                local use_verbose=true
+                print_status "INFO" "Running Quick Test with verbose output"
+                ;;
+            *)
+                local use_verbose=false
+                print_status "INFO" "Running Quick Test in normal mode"
+                ;;
+        esac
+    else
+        local use_verbose="$VERBOSE"
+    fi
+    
     print_status "INFO" "Running Quick Connectivity Test..."
     if download_file "quick-connectivity-test.sh"; then
-        "${TEMP_DIR}/quick-connectivity-test.sh"
+        if [ "$use_verbose" = "true" ]; then
+            "${TEMP_DIR}/quick-connectivity-test.sh" --verbose
+        else
+            "${TEMP_DIR}/quick-connectivity-test.sh"
+        fi
     fi
 }
 
 # Function to run comprehensive test
 run_comprehensive_test() {
+    # Ask about verbose mode if not already set via command line and we're in interactive mode
+    if [ "$VERBOSE" = "false" ] && [ "${1:-}" != "--from-cmdline" ]; then
+        echo ""
+        echo -e "${BLUE}[OPTION]${NC} Run Comprehensive Test in verbose mode?"
+        echo "         (Shows detailed DCR parsing, endpoint testing, and raw command output)"
+        read -p "Enable verbose mode for this test? [y/N]: " verbose_choice < /dev/tty
+        
+        case "$verbose_choice" in
+            [Yy]|[Yy][Ee][Ss])
+                local use_verbose=true
+                print_status "INFO" "Running Comprehensive Test with verbose output"
+                ;;
+            *)
+                local use_verbose=false
+                print_status "INFO" "Running Comprehensive Test in normal mode"
+                ;;
+        esac
+    else
+        local use_verbose="$VERBOSE"
+    fi
+    
     print_status "INFO" "Running Comprehensive Connectivity Test..."
     if download_file "test-ama-connectivity.sh"; then
-        sudo "${TEMP_DIR}/test-ama-connectivity.sh"
+        if [ "$use_verbose" = "true" ]; then
+            sudo "${TEMP_DIR}/test-ama-connectivity.sh" --verbose
+        else
+            sudo "${TEMP_DIR}/test-ama-connectivity.sh"
+        fi
     fi
 }
 
 # Function to run real AMA authentication test
 run_real_ama_auth_test() {
+    # Ask about verbose mode if not already set via command line and we're in interactive mode
+    if [ "$VERBOSE" = "false" ] && [ "${1:-}" != "--from-cmdline" ]; then
+        echo ""
+        echo -e "${BLUE}[OPTION]${NC} Run Authentication Test in verbose mode?"
+        echo "         (Shows IMDS requests, token details, and full HTTP responses)"
+        read -p "Enable verbose mode for this test? [y/N]: " verbose_choice < /dev/tty
+        
+        case "$verbose_choice" in
+            [Yy]|[Yy][Ee][Ss])
+                local use_verbose=true
+                print_status "INFO" "Running Authentication Test with verbose output"
+                ;;
+            *)
+                local use_verbose=false
+                print_status "INFO" "Running Authentication Test in normal mode"
+                ;;
+        esac
+    else
+        local use_verbose="$VERBOSE"
+    fi
+    
     print_status "INFO" "Running Real AMA Authentication Test..."
     print_status "INFO" "This test uses Managed Identity authentication exactly like the actual Azure Monitor Agent"
     if download_file "test-data-sender-msi.sh"; then
-        "${TEMP_DIR}/test-data-sender-msi.sh"
+        if [ "$use_verbose" = "true" ]; then
+            "${TEMP_DIR}/test-data-sender-msi.sh" --verbose
+        else
+            "${TEMP_DIR}/test-data-sender-msi.sh"
+        fi
     fi
 }
 
@@ -157,17 +233,26 @@ main() {
     mkdir -p "$TEMP_DIR"
     
     # Handle command line arguments
+    # Check for verbose flag in any position
+    for arg in "$@"; do
+        if [[ "$arg" == "--verbose" || "$arg" == "-v" ]]; then
+            VERBOSE=true
+            print_status "INFO" "Verbose mode enabled - showing detailed command output"
+            break
+        fi
+    done
+    
     case "${1:-}" in
         "quick"|"--quick"|"-q")
-            run_quick_test
+            run_quick_test --from-cmdline
             exit 0
             ;;
         "comprehensive"|"--comprehensive"|"-c") 
-            run_comprehensive_test
+            run_comprehensive_test --from-cmdline
             exit 0
             ;;
         "auth"|"--auth"|"-a"|"msi"|"--msi"|"-m")
-            run_real_ama_auth_test
+            run_real_ama_auth_test --from-cmdline
             exit 0
             ;;
         "download"|"--download")
@@ -175,14 +260,19 @@ main() {
             exit 0
             ;;
         "help"|"--help"|"-h")
-            echo "Usage: $0 [quick|comprehensive|auth|download]"
+            echo "Usage: $0 [quick|comprehensive|auth|download] [--verbose]"
             echo ""
             echo "Options:"
             echo "  quick          Run quick connectivity test"
             echo "  comprehensive  Run comprehensive connectivity test (requires sudo)"
             echo "  auth|msi       Run real AMA authentication test (uses Managed Identity)" 
             echo "  download       Download all scripts for local use"
+            echo "  --verbose, -v  Enable verbose output (shows raw command output)"
             echo "  (no option)    Show interactive menu"
+            echo ""
+            echo "Examples:"
+            echo "  $0 quick --verbose       # Run quick test with detailed output"
+            echo "  $0 comprehensive -v      # Run comprehensive test with verbose logging"
             exit 0
             ;;
     esac
