@@ -364,6 +364,83 @@ test_endpoint_ping() {
     fi
 }
 
+# Function to test IMDS endpoints
+test_imds_endpoints() {
+    print_status "INFO" "Testing Instance Metadata Service (IMDS) connectivity..."
+    
+    local imds_endpoint=""
+    local token_endpoint=""
+    local metadata_header="Metadata: true"
+    
+    # Detect environment
+    if [ -f "/var/opt/azcmagent/localconfig.json" ] || command -v azcmagent >/dev/null 2>&1; then
+        print_status "INFO" "Detected Azure Arc environment"
+        imds_endpoint="http://127.0.0.1:40342/metadata/instance/compute?api-version=2020-06-01"
+        token_endpoint="http://127.0.0.1:40342/metadata/identity/oauth2/token?api-version=2019-11-01&resource=https%3A%2F%2Fmanagement.azure.com%2F"
+    else
+        print_status "INFO" "Detected Azure VM environment" 
+        imds_endpoint="http://169.254.169.254/metadata/instance/compute?api-version=2020-06-01"
+        token_endpoint="http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fmanagement.azure.com%2F"
+    fi
+    
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    
+    # Test metadata endpoint
+    print_status "INFO" "Testing IMDS metadata endpoint: $imds_endpoint"
+    
+    local metadata_response
+    if metadata_response=$(curl -s -H "$metadata_header" --noproxy "*" --max-time 10 "$imds_endpoint" 2>&1); then
+        # Parse metadata response
+        local location resource_id
+        location=$(echo "$metadata_response" | jq -r '.location // empty' 2>/dev/null)
+        resource_id=$(echo "$metadata_response" | jq -r '.resourceId // empty' 2>/dev/null)
+        
+        if [ -n "$location" ] && [ -n "$resource_id" ]; then
+            print_status "SUCCESS" "IMDS metadata endpoint accessible"
+            print_status "INFO" "VM Location: $location"
+            print_status "INFO" "Resource ID: ${resource_id:0:50}..."
+        else
+            print_status "WARNING" "IMDS metadata responded but data incomplete"
+        fi
+        
+        PASSED_TESTS=$((PASSED_TESTS + 1))
+    else
+        print_status "ERROR" "IMDS metadata endpoint failed: $metadata_response"
+        FAILED_TESTS=$((FAILED_TESTS + 1))
+        return 1
+    fi
+    
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    
+    # Test MSI token endpoint (this will fail without proper permissions but shows reachability)
+    print_status "INFO" "Testing MSI token endpoint accessibility (auth expected to fail)"
+    
+    local token_response
+    if token_response=$(curl -s -H "$metadata_header" --noproxy "*" --max-time 10 "$token_endpoint" 2>&1); then
+        # Parse token response - we expect this to work or give a specific auth error
+        if echo "$token_response" | jq -e '.error // .access_token' >/dev/null 2>&1; then
+            print_status "SUCCESS" "MSI token endpoint is accessible (auth response received)"
+            
+            # Check if we actually got a token (would mean managed identity is working)
+            if echo "$token_response" | jq -e '.access_token' >/dev/null 2>&1; then
+                print_status "SUCCESS" "Managed Identity token acquisition successful!"
+            else
+                print_status "INFO" "MSI endpoint reachable (no managed identity configured or insufficient permissions)"
+            fi
+        else
+            print_status "WARNING" "MSI token endpoint returned unexpected response: $token_response"
+        fi
+        
+        PASSED_TESTS=$((PASSED_TESTS + 1))
+    else
+        print_status "ERROR" "MSI token endpoint failed: $token_response"
+        FAILED_TESTS=$((FAILED_TESTS + 1))
+        return 1
+    fi
+    
+    return 0
+}
+
 # Function to test Log Analytics ingestion endpoint
 test_log_analytics_ingestion() {
     local workspace_id=$1
@@ -434,6 +511,10 @@ test_log_analytics_ingestion() {
 # Function to run all connectivity tests
 run_connectivity_tests() {
     print_status "INFO" "Starting connectivity tests..."
+    
+    # Test IMDS endpoints
+    print_status "INFO" "Testing IMDS (Instance Metadata Service) connectivity..."
+    test_imds_endpoints
     
     # Test global handler endpoint
     local global_endpoint="global.handler.control.monitor.azure$URL_SUFFIX"

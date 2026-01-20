@@ -6,19 +6,19 @@ A comprehensive set of tools to troubleshoot Azure Monitor Agent (AMA) connectiv
 
 ```bash
 # Interactive menu (choose your test)
-curl -sSL https://raw.githubusercontent.com/YOUR-USERNAME/YOUR-REPO/main/install-and-run.sh | bash
+curl -sSL https://raw.githubusercontent.com/didiergbenou-ms/ama-connectivity-test/main/install-and-run.sh | bash
 
 # Quick connectivity test
-curl -sSL https://raw.githubusercontent.com/YOUR-USERNAME/YOUR-REPO/main/install-and-run.sh | bash -s quick
+curl -sSL https://raw.githubusercontent.com/didiergbenou-ms/ama-connectivity-test/main/install-and-run.sh | bash -s quick
 
 # Comprehensive test (detailed diagnostics)
-curl -sSL https://raw.githubusercontent.com/YOUR-USERNAME/YOUR-REPO/main/install-and-run.sh | bash -s comprehensive
+curl -sSL https://raw.githubusercontent.com/didiergbenou-ms/ama-connectivity-test/main/install-and-run.sh | bash -s comprehensive
 
 # End-to-end data ingestion test
-curl -sSL https://raw.githubusercontent.com/YOUR-USERNAME/YOUR-REPO/main/install-and-run.sh | bash -s data-sender
+curl -sSL https://raw.githubusercontent.com/didiergbenou-ms/ama-connectivity-test/main/install-and-run.sh | bash -s data-sender
 ```
 
-> **Note**: Replace `YOUR-USERNAME/YOUR-REPO` with your actual GitHub repository path
+> **Note**: Repository: `didiergbenou-ms/ama-connectivity-test`
 
 ## 📋 What These Scripts Do
 
@@ -59,15 +59,39 @@ sudo zypper install curl openssl jq bind-utils
 ## 🔧 GitHub Setup Instructions
 
 1. **Fork or create a repository** with these files
-2. **Update the installer script**:
-   - Edit `install-and-run.sh`
-   - Change `YOUR-USERNAME/YOUR-REPO` to your repository path
-3. **Upload all files** to your repository:
+2. **Ensure repository is PUBLIC** (private repos won't work with raw URLs)
+3. **Check your branch name** - it might be `master` instead of `main`
+4. **Upload all files** to your repository root:
    - `install-and-run.sh` (main installer/runner)
    - `test-ama-connectivity.sh` (comprehensive test)
    - `quick-connectivity-test.sh` (quick test)
    - `test-data-sender.sh` (data ingestion test)
    - Documentation files
+5. **Update the installer script**:
+   - Edit `install-and-run.sh` (line 15)
+   - Change `YOUR-USERNAME/YOUR-REPO` to your actual repository path
+   - Change `main` to `master` if your default branch is master
+
+### 🔍 Troubleshooting 404 Errors
+
+If you get a 404 error, check:
+
+1. **Repository is PUBLIC**: Private repos don't allow raw file access
+2. **Correct branch name**: 
+   - Try `main`: `https://raw.githubusercontent.com/username/repo/main/install-and-run.sh`
+   - Try `master`: `https://raw.githubusercontent.com/username/repo/master/install-and-run.sh`
+3. **File exists**: Check the file is in the repository root (not in a folder)
+4. **Correct URL format**: `https://raw.githubusercontent.com/USERNAME/REPO-NAME/BRANCH/FILENAME`
+5. **Case sensitivity**: Ensure exact case match for username, repo name, and filename
+
+### 📝 Quick Test Your Setup
+
+```bash
+# Test if your raw URL works (replace with your actual URL)
+curl -I https://raw.githubusercontent.com/YOUR-USERNAME/YOUR-REPO/main/install-and-run.sh
+
+# Should return "HTTP/2 200" if working, "HTTP/2 404" if not found
+```
 
 ## 📊 Example Output
 

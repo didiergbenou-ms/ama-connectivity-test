@@ -2,7 +2,7 @@
 
 # Azure Monitor Agent Connectivity Tests - GitHub Installer/Runner
 # This script downloads and runs AMA connectivity tests directly from GitHub
-# Usage: curl -sSL https://raw.githubusercontent.com/didiergbenou-ms/ama-connectivity-test/main/install-and-run.sh | bash
+# Usage: curl -sSL https://raw.githubusercontent.com/YOUR-USERNAME/YOUR-REPO/main/install-and-run.sh | bash
 
 set -euo pipefail
 
@@ -74,7 +74,7 @@ show_menu() {
     echo ""
     echo "1) Quick Connectivity Test (fast, basic checks)"
     echo "2) Comprehensive Connectivity Test (detailed analysis)"
-    echo "3) End-to-End Data Sender Test (requires workspace credentials)"
+    echo "3) Real AMA Authentication Test (uses Managed Identity like actual agent)"
     echo "4) Download all scripts for local use"
     echo "5) Exit"
     echo ""
@@ -96,23 +96,12 @@ run_comprehensive_test() {
     fi
 }
 
-# Function to run data sender test
-run_data_sender_test() {
-    print_status "INFO" "Running End-to-End Data Sender Test..."
-    if download_file "test-data-sender.sh"; then
-        echo ""
-        print_status "INFO" "This test requires your Log Analytics workspace credentials"
-        print_status "INFO" "You can find these in: Azure Portal > Log Analytics workspace > Settings > Agents management"
-        echo ""
-        read -p "Enter Workspace ID: " workspace_id < /dev/tty
-        read -s -p "Enter Workspace Key: " workspace_key < /dev/tty
-        echo ""
-        
-        if [ -n "$workspace_id" ] && [ -n "$workspace_key" ]; then
-            "${TEMP_DIR}/test-data-sender.sh" -w "$workspace_id" -k "$workspace_key"
-        else
-            print_status "ERROR" "Workspace ID and key are required"
-        fi
+# Function to run real AMA authentication test
+run_real_ama_auth_test() {
+    print_status "INFO" "Running Real AMA Authentication Test..."
+    print_status "INFO" "This test uses Managed Identity authentication exactly like the actual Azure Monitor Agent"
+    if download_file "test-data-sender-msi.sh"; then
+        "${TEMP_DIR}/test-data-sender-msi.sh"
     fi
 }
 
@@ -123,7 +112,7 @@ download_all_scripts() {
     local scripts=(
         "test-ama-connectivity.sh"
         "quick-connectivity-test.sh" 
-        "test-data-sender.sh"
+        "test-data-sender-msi.sh"
         "AMA-CONNECTIVITY-TEST.md"
         "CONNECTIVITY-TESTING-README.md"
     )
@@ -177,8 +166,8 @@ main() {
             run_comprehensive_test
             exit 0
             ;;
-        "data-sender"|"--data-sender"|"-d")
-            run_data_sender_test
+        "auth"|"--auth"|"-a"|"msi"|"--msi"|"-m")
+            run_real_ama_auth_test
             exit 0
             ;;
         "download"|"--download")
@@ -186,12 +175,12 @@ main() {
             exit 0
             ;;
         "help"|"--help"|"-h")
-            echo "Usage: $0 [quick|comprehensive|data-sender|download]"
+            echo "Usage: $0 [quick|comprehensive|auth|download]"
             echo ""
             echo "Options:"
             echo "  quick          Run quick connectivity test"
             echo "  comprehensive  Run comprehensive connectivity test (requires sudo)"
-            echo "  data-sender    Run end-to-end data sender test" 
+            echo "  auth|msi       Run real AMA authentication test (uses Managed Identity)" 
             echo "  download       Download all scripts for local use"
             echo "  (no option)    Show interactive menu"
             exit 0
@@ -211,7 +200,7 @@ main() {
                 run_comprehensive_test
                 ;;
             3)
-                run_data_sender_test
+                run_real_ama_auth_test
                 ;;
             4)
                 download_all_scripts
