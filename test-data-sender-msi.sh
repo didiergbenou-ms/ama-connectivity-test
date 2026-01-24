@@ -397,7 +397,16 @@ main() {
     local resource="$DEFAULT_RESOURCE"
     local workspace_id=""
     
-    # Parse command line arguments
+    # Filter out --verbose flag before processing other arguments
+    local filtered_args=()
+    for arg in "$@"; do
+        if [[ "$arg" != "--verbose" ]]; then
+            filtered_args+=("$arg")
+        fi
+    done
+    
+    # Parse command line arguments (excluding --verbose which was handled earlier)
+    set -- "${filtered_args[@]}"  # Set positional parameters to filtered args
     while getopts "t:d:r:w:h" opt; do
         case $opt in
             t) log_type="$OPTARG" ;;
@@ -405,7 +414,7 @@ main() {
             r) resource="$OPTARG" ;;
             w) workspace_id="$OPTARG" ;;
             h) usage; exit 0 ;;
-            \?) echo "Invalid option -$OPTARG" >&2; usage; exit 1 ;;
+            \?) echo "Invalid option -${OPTARG:-unknown}" >&2; usage; exit 1 ;;
         esac
     done
     
