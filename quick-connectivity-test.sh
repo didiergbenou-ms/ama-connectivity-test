@@ -51,10 +51,18 @@ quick_test() {
         
         # SSL Test
         print_status "INFO" "SSL Test: openssl s_client -connect $endpoint:443 -brief"
-        if timeout 10 openssl s_client -connect "$endpoint:443" -brief 2>&1; then
+        local ssl_output
+        ssl_output=$(timeout 10 openssl s_client -connect "$endpoint:443" -brief 2>&1)
+        local ssl_exit_code=$?
+        
+        echo "SSL Output:"
+        echo "$ssl_output"
+        echo ""
+        
+        if [ $ssl_exit_code -eq 0 ]; then
             print_status "SUCCESS" "SSL connection successful for $endpoint"
         else
-            print_status "ERROR" "SSL connection failed for $endpoint"
+            print_status "ERROR" "SSL connection failed for $endpoint (exit code: $ssl_exit_code)"
         fi
         
         # HTTP Test

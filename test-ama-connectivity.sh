@@ -312,23 +312,24 @@ test_ssl_connection() {
     
     local ssl_output
     if [ "$VERBOSE" = "true" ]; then
-        if ssl_output=$($ssl_cmd 2>&1); then
-            echo "SSL Output:"
-            echo "$ssl_output"
-            if echo "$ssl_output" | grep -q "CONNECTION ESTABLISHED"; then
-                if echo "$ssl_output" | grep -q "Verification: OK"; then
-                    print_status "SUCCESS" "SSL connection and verification successful for $endpoint"
-                    return 0
-                else
-                    print_status "WARNING" "SSL connection established but verification failed for $endpoint"
-                    return 0
-                fi
+        # Always capture SSL output in verbose mode, regardless of exit code
+        ssl_output=$($ssl_cmd 2>&1)
+        local ssl_exit_code=$?
+        
+        echo "SSL Output:"
+        echo "$ssl_output"
+        echo ""
+        
+        if [ $ssl_exit_code -eq 0 ] && echo "$ssl_output" | grep -q "CONNECTION ESTABLISHED"; then
+            if echo "$ssl_output" | grep -q "Verification: OK"; then
+                print_status "SUCCESS" "SSL connection and verification successful for $endpoint"
+                return 0
             else
-                print_status "ERROR" "SSL connection failed for $endpoint"
-                return 1
+                print_status "WARNING" "SSL connection established but verification failed for $endpoint"
+                return 0
             fi
         else
-            print_status "ERROR" "SSL connection test failed for $endpoint: $ssl_output"
+            print_status "ERROR" "SSL connection failed for $endpoint (exit code: $ssl_exit_code)"
             return 1
         fi
     else
